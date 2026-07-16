@@ -28,6 +28,13 @@ export default function QuickViewModal({
     product.sizeOptions?.[0] || "One Size"
   );
   const [successMsg, setSuccessMsg] = React.useState(false);
+  const [activeImage, setActiveImage] = React.useState(product.image);
+
+  React.useEffect(() => {
+    setActiveImage(product.image);
+    setSelectedMaterial(product.materialOptions?.[0] || "");
+    setSelectedSize(product.sizeOptions?.[0] || "One Size");
+  }, [product]);
 
   const handleAdd = () => {
     onAddToBag(product, selectedMaterial, selectedSize);
@@ -68,17 +75,43 @@ export default function QuickViewModal({
           </button>
 
           {/* Left: Product Image */}
-          <div className="md:col-span-6 relative aspect-[4/5] bg-brand-surface-low overflow-hidden">
-            <img
-              src={product.image}
-              alt={product.name}
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-            {product.isNew && (
-              <span className="absolute top-4 left-4 bg-brand-gold text-white font-sans text-[10px] font-medium px-3 py-1 tracking-[0.1em] uppercase">
-                NEW IN
-              </span>
+          <div className="md:col-span-6 flex flex-col justify-between bg-brand-surface-low p-6 border-b md:border-b-0 md:border-r border-brand-outline-variant/25">
+            <div className="relative aspect-[4/5] overflow-hidden rounded-sm bg-brand-linen/10 w-full mb-4">
+              <img
+                src={activeImage}
+                alt={product.name}
+                className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                referrerPolicy="no-referrer"
+              />
+              {product.isNew && (
+                <span className="absolute top-4 left-4 bg-brand-gold text-white font-sans text-[10px] font-medium px-3 py-1 tracking-[0.1em] uppercase">
+                  NEW IN
+                </span>
+              )}
+            </div>
+            
+            {/* Secondary images gallery inside modal */}
+            {product.secondaryImages && product.secondaryImages.length > 1 && (
+              <div className="grid grid-cols-5 gap-2 mt-auto">
+                {product.secondaryImages.map((img, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveImage(img)}
+                    className={`aspect-square overflow-hidden border transition-all duration-300 rounded-sm relative ${
+                      activeImage === img
+                        ? "border-brand-gold ring-2 ring-brand-gold/10 scale-[0.98]"
+                        : "border-brand-outline-variant/30 hover:border-brand-gold/40"
+                    }`}
+                  >
+                    <img
+                      src={img}
+                      alt={`Thumbnail ${i + 1}`}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 
@@ -94,6 +127,24 @@ export default function QuickViewModal({
               <p className="font-sans text-lg font-semibold text-brand-gold mb-6">
                 ${product.price.toLocaleString()}.00
               </p>
+
+              {product.stock !== undefined && (
+                <div className="mb-6">
+                  {product.stock === 0 ? (
+                    <span className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded uppercase tracking-wider inline-block">
+                      غير متوفر حالياً / Out of Stock
+                    </span>
+                  ) : product.stock === 1 ? (
+                    <span className="text-xs text-amber-700 font-bold bg-amber-50 border border-amber-300 px-3 py-1.5 rounded uppercase tracking-wider inline-block animate-pulse">
+                      آخر قطعة متبقية! / THE LAST ONE LEFT!
+                    </span>
+                  ) : (
+                    <span className="text-xs text-brand-umber font-semibold bg-brand-gold/10 border border-brand-gold/20 px-3 py-1.5 rounded inline-block font-sans">
+                      الكمية المتبقية: {product.stock} قطع / Only {product.stock} left in stock
+                    </span>
+                  )}
+                </div>
+              )}
 
               <div className="h-px bg-brand-outline-variant/20 w-full mb-6" />
 
@@ -159,10 +210,18 @@ export default function QuickViewModal({
               <div className="flex gap-4">
                 <button
                   onClick={handleAdd}
-                  disabled={successMsg}
-                  className="flex-1 bg-brand-gold hover:bg-brand-umber disabled:bg-brand-gold/80 text-white py-4 px-6 text-xs font-semibold uppercase tracking-[0.15em] transition-all duration-300 flex items-center justify-center gap-2 shadow-sm"
+                  disabled={successMsg || product.stock === 0}
+                  className={`flex-1 py-4 px-6 text-xs font-semibold uppercase tracking-[0.15em] transition-all duration-300 flex items-center justify-center gap-2 shadow-sm ${
+                    product.stock === 0
+                      ? "bg-rose-700/85 hover:bg-rose-700/85 text-white cursor-not-allowed"
+                      : "bg-brand-gold hover:bg-brand-umber disabled:bg-brand-gold/80 text-white"
+                  }`}
                 >
-                  {successMsg ? (
+                  {product.stock === 0 ? (
+                    <>
+                      OUT OF STOCK
+                    </>
+                  ) : successMsg ? (
                     <>
                       <Check className="w-4 h-4 stroke-[2]" />
                       Added to Bag!

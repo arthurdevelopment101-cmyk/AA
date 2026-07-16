@@ -33,16 +33,30 @@ export default function ProductCard({
           src={product.image}
           alt={product.name}
           onClick={() => onProductClick(product)}
-          className="w-full h-full object-cover transition-transform duration-[1200ms] cubic-bezier(0.22, 1, 0.36, 1) group-hover:scale-105"
+          className={`w-full h-full object-cover transition-transform duration-[1200ms] cubic-bezier(0.22, 1, 0.36, 1) group-hover:scale-105 ${
+            product.stock === 0 ? "opacity-60" : ""
+          }`}
           referrerPolicy="no-referrer"
         />
 
         {/* Dynamic Badges */}
-        {product.isNew && (
-          <div className="absolute top-4 left-4 bg-brand-gold text-white font-sans text-[10px] font-medium px-3 py-1 tracking-[0.1em] uppercase shadow-sm">
-            NEW
-          </div>
-        )}
+        <div className="absolute top-4 left-4 flex flex-col gap-1.5 items-start">
+          {product.isNew && (
+            <div className="bg-brand-gold text-white font-sans text-[10px] font-medium px-3 py-1 tracking-[0.1em] uppercase shadow-sm">
+              NEW
+            </div>
+          )}
+          {product.stock === 0 && (
+            <div className="bg-rose-700 text-white font-sans text-[9px] font-bold px-2.5 py-1 tracking-[0.1em] uppercase shadow-sm">
+              OUT OF STOCK
+            </div>
+          )}
+          {product.stock === 1 && (
+            <div className="bg-amber-600 text-white font-sans text-[9px] font-bold px-2.5 py-1 tracking-[0.1em] uppercase shadow-sm animate-pulse">
+              THE LAST
+            </div>
+          )}
+        </div>
 
         {/* Favorite Toggle Button */}
         <button
@@ -82,6 +96,11 @@ export default function ProductCard({
           className="font-serif text-base text-brand-umber hover:text-brand-gold cursor-pointer transition-colors mb-1.5 tracking-wide max-w-[90%] truncate font-normal"
         >
           {product.name}
+          {product.stock === 1 && (
+            <span className="text-[10px] text-amber-600 font-bold font-sans ml-1.5 uppercase tracking-wider animate-pulse inline-block">
+              (the last)
+            </span>
+          )}
         </h3>
         <p className="font-sans text-xs font-semibold tracking-widest text-brand-gold">
           ${product.price.toLocaleString()}

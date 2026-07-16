@@ -13,6 +13,7 @@ export interface Product {
   sizeOptions?: string[];
   details?: string[];
   craftsmanship?: string;
+  stock?: number; // Stock quantity (undefined or null or a positive number)
 }
 
 export interface CartItem {
@@ -36,9 +37,19 @@ export interface UserProfile {
   email: string;
   avatar: string;
   provider: "google" | "facebook" | "apple" | "email";
-  tier: "Bronze" | "Silver" | "Gold" | "Silver Collector" | "Gold Enthusiast" | "Platinum Connoisseur" | "Private VIP Member";
+  tier: "Bronze" | "Silver" | "Gold" | "Platinum" | "Diamond";
   loyaltyPoints: number;
+  totalSpent?: number; // Lifetime total spending in EGP
   joinedDate: string;
   redeemedRewards?: string[];
 }
+
+export function getTierFromSpent(spent: number): "Bronze" | "Silver" | "Gold" | "Platinum" | "Diamond" {
+  if (spent >= 150000) return "Diamond";
+  if (spent >= 70000) return "Platinum";
+  if (spent >= 30000) return "Gold";
+  if (spent >= 10000) return "Silver";
+  return "Bronze";
+}
+
 

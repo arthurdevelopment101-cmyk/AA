@@ -20,6 +20,8 @@ import {
   ShieldCheck,
   Lock,
   Unlock,
+  Upload,
+  Package,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product } from "../types";
@@ -77,6 +79,10 @@ export default function AdminPanel({
   const pendingCallbackRef = React.useRef<(() => void) | null>(null);
   const [showLockModal, setShowLockModal] = React.useState(false);
 
+  // Custom Confirmation Dialogs State
+  const [productToDelete, setProductToDelete] = React.useState<{ id: string; name: string } | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = React.useState(false);
+
   const verifyAction = (callback: () => void) => {
     if (isAuthenticated) {
       callback();
@@ -97,6 +103,7 @@ export default function AdminPanel({
   const [categoryId, setCategoryId] = React.useState("fine-jewelry");
   const [price, setPrice] = React.useState<number | "">("");
   const [imageUrl, setImageUrl] = React.useState("");
+  const [additionalImages, setAdditionalImages] = React.useState<string[]>([]);
   const [tagline, setTagline] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [isNew, setIsNew] = React.useState(false);
@@ -104,6 +111,7 @@ export default function AdminPanel({
   const [sizeOptions, setSizeOptions] = React.useState<string>("06, 07, 08, 09");
   const [details, setDetails] = React.useState<string>("18k Solid Recycled Gold, Hand-finished matte satin luster");
   const [craftsmanship, setCraftsmanship] = React.useState("");
+  const [stock, setStock] = React.useState<number | "">("");
 
   // Feedback notifications
   const [notification, setNotification] = React.useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -120,6 +128,16 @@ export default function AdminPanel({
       setCategoryId(editingProduct.categoryId);
       setPrice(editingProduct.price);
       setImageUrl(editingProduct.image);
+      
+      // Parse secondary/additional images (exclude primary image if duplicate)
+      if (editingProduct.secondaryImages && editingProduct.secondaryImages.length > 0) {
+        const primary = editingProduct.image;
+        const others = editingProduct.secondaryImages.filter((img) => img !== primary);
+        setAdditionalImages(others);
+      } else {
+        setAdditionalImages([]);
+      }
+
       setTagline(editingProduct.tagline);
       setDescription(editingProduct.description);
       setIsNew(!!editingProduct.isNew);
@@ -127,6 +145,7 @@ export default function AdminPanel({
       setSizeOptions(editingProduct.sizeOptions?.join(", ") || "");
       setDetails(editingProduct.details?.join(", ") || "");
       setCraftsmanship(editingProduct.craftsmanship || "");
+      setStock(editingProduct.stock !== undefined ? editingProduct.stock : "");
     } else {
       resetForm();
     }
@@ -137,6 +156,7 @@ export default function AdminPanel({
     setCategoryId("fine-jewelry");
     setPrice("");
     setImageUrl("");
+    setAdditionalImages([]);
     setTagline("");
     setDescription("");
     setIsNew(false);
@@ -144,6 +164,7 @@ export default function AdminPanel({
     setSizeOptions("06, 07, 08, 09");
     setDetails("18k Solid Recycled Gold, Hand-finished matte-satin luster");
     setCraftsmanship("");
+    setStock("");
   };
 
   const handleSaveProduct = (e: React.FormEvent) => {
@@ -172,7 +193,7 @@ export default function AdminPanel({
       categoryName,
       price: Number(price),
       image: imageUrl.trim(),
-      secondaryImages: [imageUrl.trim()],
+      secondaryImages: [imageUrl.trim(), ...additionalImages.map((img) => img.trim()).filter(Boolean)],
       tagline: tagline.trim() || `"${name.trim()} by VERO Boutique"`,
       description: description.trim() || "An authentic quiet luxury piece hand-finished with exceptional Italian craftsmanship.",
       isNew,
@@ -180,6 +201,7 @@ export default function AdminPanel({
       sizeOptions: sizeOptions.split(",").map((s) => s.trim()).filter(Boolean),
       details: details.split(",").map((s) => s.trim()).filter(Boolean),
       craftsmanship: craftsmanship.trim() || undefined,
+      stock: stock === "" ? undefined : Number(stock),
     };
 
     const proceed = () => {
@@ -204,12 +226,17 @@ export default function AdminPanel({
   };
 
   const handleDeleteProduct = (productId: string, productName: string) => {
-    if (confirm(`Are you sure you want to remove "${productName}"?`)) {
-      verifyAction(() => {
-        setProducts((prev) => prev.filter((p) => p.id !== productId));
-        triggerNotification(`"${productName}" has been removed from the boutique.`);
-      });
-    }
+    setProductToDelete({ id: productId, name: productName });
+  };
+
+  const confirmDeleteProduct = () => {
+    if (!productToDelete) return;
+    const { id, name } = productToDelete;
+    verifyAction(() => {
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      triggerNotification(`"${name}" has been removed from the boutique.`);
+      setProductToDelete(null);
+    });
   };
 
   const handleToggleNewArrival = (productId: string) => {
@@ -421,6 +448,7 @@ export default function AdminPanel({
                       <th className="py-4 px-6 font-semibold">Product Detail</th>
                       <th className="py-4 px-4 font-semibold">Category</th>
                       <th className="py-4 px-4 font-semibold">Price</th>
+                      <th className="py-4 px-4 font-semibold text-center">الكمية / Stock</th>
                       <th className="py-4 px-4 font-semibold text-center">Arrival Status</th>
                       <th className="py-4 px-6 font-semibold text-right">Actions</th>
                     </tr>
@@ -453,6 +481,23 @@ export default function AdminPanel({
                         </td>
                         <td className="py-4 px-4 font-mono font-bold text-brand-umber text-sm">
                           ${product.price.toLocaleString()}
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          {product.stock !== undefined ? (
+                            product.stock === 0 ? (
+                              <span className="inline-block text-rose-600 bg-rose-50 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider border border-rose-200">
+                                Out of Stock
+                              </span>
+                            ) : (
+                              <span className="inline-block text-brand-umber bg-brand-gold/10 px-2.5 py-1 rounded text-[10px] font-bold border border-brand-gold/20 font-mono">
+                                {product.stock} pcs
+                              </span>
+                            )
+                          ) : (
+                            <span className="inline-block text-brand-outline bg-brand-linen/50 px-2.5 py-1 rounded text-[10px] font-medium italic">
+                              Unlimited
+                            </span>
+                          )}
                         </td>
                         <td className="py-4 px-4 text-center">
                           <button
@@ -598,20 +643,194 @@ export default function AdminPanel({
                 </select>
               </div>
 
-              {/* Product Image URL */}
+              {/* Stock Quantity */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-brand-umber uppercase tracking-wider flex items-center gap-1.5">
-                  <FileImage className="w-3.5 h-3.5 text-brand-outline" />
-                  <span>Image URL *</span>
+                  <Package className="w-3.5 h-3.5 text-brand-outline" />
+                  <span>كمية المخزون / Stock Quantity</span>
                 </label>
                 <input
-                  type="url"
-                  required
-                  placeholder="Paste direct HTTPS photo URL or select preset above"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  className="w-full bg-white border border-brand-outline-variant/40 rounded-sm text-xs px-4 py-3 outline-none focus:border-brand-gold text-brand-umber"
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 10 (أتركه فارغاً ليكون غير محدود)"
+                  value={stock}
+                  onChange={(e) => setStock(e.target.value === "" ? "" : Number(e.target.value))}
+                  className="w-full bg-white border border-brand-outline-variant/40 rounded-sm text-xs px-4 py-3 outline-none focus:border-brand-gold text-brand-umber font-medium font-mono"
                 />
+              </div>
+
+              {/* Product Image Selection & Upload */}
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-xs font-bold text-brand-umber uppercase tracking-wider flex items-center gap-1.5">
+                  <FileImage className="w-3.5 h-3.5 text-brand-outline" />
+                  <span>صورة المنتج / Product Image *</span>
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center bg-brand-linen/5 p-4 border border-brand-outline-variant/20 rounded-sm">
+                  {/* Left part: preview + File Selector */}
+                  <div className="md:col-span-5 flex items-center gap-3 bg-white p-3 border border-dashed border-brand-outline-variant/30 rounded-sm">
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt="Preview"
+                        className="w-12 h-12 object-cover rounded border border-brand-outline-variant/30 shrink-0 bg-white"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded border border-dashed border-brand-outline-variant/30 flex items-center justify-center bg-brand-linen/10 text-brand-outline/40 shrink-0">
+                        <FileImage className="w-5 h-5" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-brand-outline block mb-1">
+                        رفع صورة من جهازك / Upload Local Image
+                      </span>
+                      <label className="inline-flex items-center gap-1.5 bg-brand-umber hover:bg-brand-gold text-white text-[10px] font-semibold uppercase tracking-wider px-3 py-2 rounded cursor-pointer transition-colors">
+                        <Upload className="w-3 h-3 text-brand-gold" />
+                        <span>اختر ملف / Choose File</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                if (typeof reader.result === "string") {
+                                  setImageUrl(reader.result);
+                                  triggerNotification("تم تحميل الصورة بنجاح! / Image loaded successfully!");
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Middle separator */}
+                  <div className="md:col-span-1 text-center font-serif text-[10px] uppercase tracking-widest text-brand-outline/50 my-1 md:my-0">
+                    أو / OR
+                  </div>
+
+                  {/* Right part: URL input */}
+                  <div className="md:col-span-6 space-y-1">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-brand-outline block">
+                      رابط صورة مباشر / Direct Image URL
+                    </span>
+                    <input
+                      type="url"
+                      placeholder="Paste direct HTTPS photo URL or select preset above"
+                      value={imageUrl.startsWith("data:") ? "" : imageUrl}
+                      onChange={(e) => setImageUrl(e.target.value)}
+                      className="w-full bg-white border border-brand-outline-variant/40 rounded-sm text-xs px-4 py-3 outline-none focus:border-brand-gold text-brand-umber"
+                    />
+                    {imageUrl.startsWith("data:") && (
+                      <span className="text-[9px] text-emerald-600 block font-medium">
+                        ✓ تم رفع صورة من جهازك بنجاح ونشطة حالياً / Local uploaded image is currently active
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Product Images */}
+              <div className="space-y-4 md:col-span-2 bg-brand-linen/5 p-4 border border-brand-outline-variant/20 rounded-sm">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-brand-umber uppercase tracking-wider flex items-center gap-1.5">
+                    <FileImage className="w-3.5 h-3.5 text-brand-gold" />
+                    <span>صور إضافية للمنتج / Additional Product Images</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setAdditionalImages([...additionalImages, ""])}
+                    className="inline-flex items-center gap-1 bg-brand-gold hover:bg-brand-umber text-white text-[10px] font-semibold uppercase tracking-wider px-3 py-1.5 rounded transition-all shadow-sm"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>إضافة صورة / Add Image</span>
+                  </button>
+                </div>
+
+                {additionalImages.length === 0 ? (
+                  <p className="text-[11px] text-brand-outline italic leading-relaxed">
+                    لا توجد صور إضافية حالياً. سيتم عرض الصورة الأساسية فقط. / No additional images added yet. Only the main image will be displayed.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {additionalImages.map((imgUrl, idx) => (
+                      <div key={idx} className="flex gap-3 items-center bg-white p-3 border border-brand-outline-variant/20 rounded-sm">
+                        {/* Preview thumbnail */}
+                        <div className="w-10 h-10 rounded border border-brand-outline-variant/30 flex items-center justify-center overflow-hidden shrink-0 bg-brand-linen/10">
+                          {imgUrl ? (
+                            <img src={imgUrl} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            <FileImage className="w-4 h-4 text-brand-outline/40" />
+                          )}
+                        </div>
+
+                        {/* Input URL */}
+                        <div className="flex-1">
+                          <input
+                            type="url"
+                            placeholder="Paste additional image URL or upload below..."
+                            value={imgUrl.startsWith("data:") ? "" : imgUrl}
+                            onChange={(e) => {
+                              const updated = [...additionalImages];
+                              updated[idx] = e.target.value;
+                              setAdditionalImages(updated);
+                            }}
+                            className="w-full bg-brand-linen/5 border border-brand-outline-variant/40 rounded-sm text-xs px-3 py-2 outline-none focus:border-brand-gold text-brand-umber"
+                          />
+                          {imgUrl.startsWith("data:") && (
+                            <span className="text-[8px] text-emerald-600 block font-medium mt-0.5">
+                              ✓ تم رفع الصورة بنجاح / Uploaded successfully
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* File Upload Button */}
+                          <label className="p-2 bg-brand-linen hover:bg-brand-gold hover:text-white text-brand-umber rounded cursor-pointer transition-colors border border-brand-outline-variant/30">
+                            <Upload className="w-3.5 h-3.5" />
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    if (typeof reader.result === "string") {
+                                      const updated = [...additionalImages];
+                                      updated[idx] = reader.result;
+                                      setAdditionalImages(updated);
+                                      triggerNotification("تم تحميل الصورة بنجاح! / Image loaded successfully!");
+                                    }
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+
+                          {/* Delete Row button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAdditionalImages(additionalImages.filter((_, i) => i !== idx));
+                            }}
+                            className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white rounded border border-rose-100 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Tagline */}
@@ -804,12 +1023,7 @@ export default function AdminPanel({
               <div className="pt-2">
                 <button
                   onClick={() => {
-                    if (confirm("Reset boutique back to curated defaults?")) {
-                      verifyAction(() => {
-                        onResetDatabase();
-                        triggerNotification("Restored standard product lines.");
-                      });
-                    }
+                    setShowResetConfirm(true);
                   }}
                   className="bg-brand-umber text-white text-[11px] font-semibold tracking-wider uppercase py-3 px-6 rounded-sm hover:bg-brand-gold transition-colors flex items-center gap-2"
                 >
@@ -913,6 +1127,108 @@ export default function AdminPanel({
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Overlay Modal */}
+      <AnimatePresence>
+        {productToDelete && (
+          <div className="fixed inset-0 bg-brand-umber/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 select-text">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#fff8f3] border border-brand-outline-variant/35 p-6 md:p-8 max-w-md w-full shadow-2xl rounded-sm space-y-6 text-brand-umber font-sans text-right"
+              dir="rtl"
+            >
+              <div className="text-center space-y-2">
+                <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20 mb-2 mx-auto">
+                  <Trash2 className="w-6 h-6" />
+                </span>
+                <h3 className="font-serif text-xl tracking-wide font-normal text-center">
+                  تأكيد حذف المنتج
+                </h3>
+                <p className="text-xs text-brand-outline font-light leading-relaxed text-center">
+                  هل أنت متأكد أنك تريد حذف منتج <strong className="font-semibold text-brand-umber">"{productToDelete.name}"</strong> من الكتالوج نهائياً؟
+                  <br />
+                  <span className="text-[10px] text-brand-gold font-mono block mt-1">
+                    Are you sure you want to permanently delete this product?
+                  </span>
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setProductToDelete(null)}
+                  className="flex-1 border border-brand-outline-variant/30 text-brand-outline hover:text-brand-umber text-xs font-semibold py-3 uppercase tracking-wider rounded-sm transition-colors bg-white text-center animate-pulse-none"
+                >
+                  إلغاء / Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteProduct}
+                  className="flex-1 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold py-3 uppercase tracking-wider rounded-sm transition-all shadow-sm text-center"
+                >
+                  حذف / Delete
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Restore Database Confirmation Overlay Modal */}
+      <AnimatePresence>
+        {showResetConfirm && (
+          <div className="fixed inset-0 bg-brand-umber/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 select-text">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#fff8f3] border border-brand-outline-variant/35 p-6 md:p-8 max-w-md w-full shadow-2xl rounded-sm space-y-6 text-brand-umber font-sans text-right"
+              dir="rtl"
+            >
+              <div className="text-center space-y-2">
+                <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-brand-gold/10 text-brand-gold border border-brand-gold/20 mb-2 mx-auto">
+                  <RefreshCw className="w-6 h-6" />
+                </span>
+                <h3 className="font-serif text-xl tracking-wide font-normal text-center">
+                  تأكيد إعادة ضبط المتجر
+                </h3>
+                <p className="text-xs text-brand-outline font-light leading-relaxed text-center">
+                  هل أنت متأكد أنك تريد إعادة تعيين المتجر إلى المنتجات والخطوط المنسقة الأصلية؟ سيتم تجاهل كافة التغييرات المخصصة.
+                  <br />
+                  <span className="text-[10px] text-brand-gold font-mono block mt-1">
+                    Reset boutique back to curated defaults? All custom additions will be lost.
+                  </span>
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowResetConfirm(false)}
+                  className="flex-1 border border-brand-outline-variant/30 text-brand-outline hover:text-brand-umber text-xs font-semibold py-3 uppercase tracking-wider rounded-sm transition-colors bg-white text-center"
+                >
+                  إلغاء / Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    verifyAction(() => {
+                      onResetDatabase();
+                      triggerNotification("Restored standard product lines.");
+                      setShowResetConfirm(false);
+                    });
+                  }}
+                  className="flex-1 bg-brand-gold hover:bg-brand-umber text-white text-xs font-semibold py-3 uppercase tracking-wider rounded-sm transition-all shadow-sm text-center"
+                >
+                  إعادة تعيين / Reset
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

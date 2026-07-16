@@ -2,6 +2,7 @@ import React from "react";
 import { UserProfile } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 import { LogOut, Award, Shield, Gift, Clipboard, CreditCard, ChevronRight, X, Sparkles, Check, Copy } from "lucide-react";
+import UserAvatar from "./UserAvatar";
 
 interface UserProfileDropdownProps {
   user: UserProfile;
@@ -165,10 +166,11 @@ export default function UserProfileDropdown({
 
         {/* Member Profile */}
         <div className="mt-4 flex items-center gap-3">
-          <img
-            src={user.avatar}
-            alt={user.name}
-            className="w-12 h-12 rounded-full object-cover border-2 border-[#c5a880]/35 shadow"
+          <UserAvatar
+            name={user.name}
+            avatar={user.avatar}
+            className="w-12 h-12"
+            borderClassName="border-2 border-[#c5a880]/35 shadow"
           />
           <div className="space-y-0.5">
             <h4 className="font-serif text-xs md:text-sm tracking-wide font-medium uppercase text-brand-dark">
@@ -227,35 +229,120 @@ export default function UserProfileDropdown({
         {/* Tab 1: Overview */}
         {activeSubTab === "overview" && (
           <div className="space-y-4 mt-4">
-            {/* Loyalty Balance */}
-            <div className="p-4 rounded-xl bg-[#c5a880]/5 border border-[#c5a880]/10 space-y-2">
-              <div className="flex justify-between items-center text-[10px] uppercase font-bold">
-                <span className="text-brand-outline tracking-wider">رصيد النقاط / Point Balance</span>
-                <span className="text-brand-gold tracking-widest text-xs">{user.loyaltyPoints || 0} PTS</span>
-              </div>
+            {/* Elegant Membership Card */}
+            {(() => {
+              const spent = user.totalSpent || 0;
+              const tier = user.tier || "Bronze";
+              
+              // Dynamic card styles
+              let cardBg = "bg-gradient-to-br from-[#aa7c11] via-[#dfc5a6] to-[#8c5e00] border border-amber-600/30";
+              let cardText = "text-amber-50";
+              let titleText = "🥉 BRONZE COLLECTOR";
+              let isDiamond = false;
+              let isSilver = false;
 
+              if (tier === "Silver") {
+                cardBg = "bg-gradient-to-br from-slate-300 via-slate-50 to-slate-400 border border-slate-300";
+                cardText = "text-slate-800";
+                titleText = "🥈 SILVER COLLECTOR";
+                isSilver = true;
+              } else if (tier === "Gold") {
+                cardBg = "bg-gradient-to-br from-amber-400 via-yellow-100 to-amber-600 border border-amber-400";
+                cardText = "text-amber-950";
+                titleText = "🥇 GOLD COLLECTOR ✨";
+              } else if (tier === "Platinum") {
+                cardBg = "bg-gradient-to-br from-indigo-950 via-teal-900 to-indigo-900 border border-teal-500/20";
+                cardText = "text-teal-100";
+                titleText = "💎 PLATINUM ELITE";
+              } else if (tier === "Diamond") {
+                cardBg = "bg-gradient-to-br from-slate-950 via-cyan-950 to-blue-950 border border-cyan-400/40";
+                cardText = "text-cyan-100";
+                titleText = "💠 DIAMOND EXCLUSIVE";
+                isDiamond = true;
+              }
+
+              return (
+                <div className={`p-4 rounded-xl ${cardBg} relative overflow-hidden shadow-lg transition-all duration-300`}>
+                  {/* Sweep/Shimmer metallic highlight */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-shimmer pointer-events-none" />
+
+                  {/* Diamond Floating Particles */}
+                  {isDiamond && (
+                    <>
+                      <div className="absolute top-2 right-12 w-2 h-2 bg-cyan-300 rounded-full animate-float-diamonds pointer-events-none opacity-60" style={{ animationDelay: "0s" }} />
+                      <div className="absolute bottom-4 right-4 w-1.5 h-1.5 bg-cyan-200 rounded-full animate-float-diamonds pointer-events-none opacity-75" style={{ animationDelay: "1.5s" }} />
+                      <div className="absolute top-6 left-16 w-2 h-2 bg-blue-300 rounded-full animate-float-diamonds pointer-events-none opacity-40" style={{ animationDelay: "3.3s" }} />
+                    </>
+                  )}
+
+                  {/* Card Content */}
+                  <div className="relative z-10 space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className={`text-[8px] font-bold tracking-[0.2em] uppercase opacity-75 ${cardText}`}>
+                          VERO Elite Club
+                        </span>
+                        <h5 className={`font-serif text-sm font-bold tracking-wide mt-0.5 ${cardText}`}>
+                          {titleText}
+                        </h5>
+                      </div>
+                      <span className={`text-[10px] font-mono tracking-wider font-semibold bg-white/10 px-2 py-0.5 rounded ${cardText}`}>
+                        EGP {spent.toLocaleString()} Spent
+                      </span>
+                    </div>
+
+                    <div className="pt-2 flex justify-between items-end border-t border-white/10">
+                      <div>
+                        <p className={`text-[8px] uppercase tracking-widest opacity-60 ${cardText}`}>Collector Signature</p>
+                        <p className={`font-serif text-xs italic tracking-wider mt-0.5 ${cardText}`}>{user.name}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-[8px] uppercase tracking-widest opacity-60 ${cardText}`}>Point Balance</p>
+                        <p className={`text-xs font-bold font-mono tracking-widest mt-0.5 ${cardText}`}>{user.loyaltyPoints || 0} PTS</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Loyalty Balance & Progress Bar */}
+            <div className="p-4 rounded-xl bg-[#c5a880]/5 border border-[#c5a880]/10 space-y-2">
               {/* Dynamic progress bar and tier text according to user specification */}
               {(() => {
-                const points = user.loyaltyPoints || 0;
+                const spent = user.totalSpent || 0;
                 let pct = 0;
                 let textAr = "";
                 let textEn = "";
-                if (points < 5000) {
-                  pct = (points / 5000) * 100;
-                  textAr = `فئة برونزية. اجمع ${5000 - points} نقطة إضافية للوصول للفئة الفضية (+25% نقاط)!`;
-                  textEn = `Bronze Tier. Get ${5000 - points} more PTS for Silver Tier (+25% Points rate)!`;
-                } else if (points < 15000) {
-                  pct = ((points - 5000) / 10000) * 100;
-                  textAr = `فئة فضية (+25%). اجمع ${15000 - points} نقطة إضافية للوصول للفئة الذهبية (+50% نقاط)!`;
-                  textEn = `Silver Tier (+25%). Get ${15000 - points} more PTS for Gold Tier (+50% Points rate)!`;
+                if (spent < 10000) {
+                  pct = (spent / 10000) * 100;
+                  textAr = `الفئة البرونزية. اجمع ${(10000 - spent).toLocaleString()} EGP إضافية للوصول للفئة الفضية!`;
+                  textEn = `Bronze Tier. Spend ${(10000 - spent).toLocaleString()} EGP more for Silver Tier (+25% Points)!`;
+                } else if (spent < 30000) {
+                  pct = ((spent - 10000) / 20000) * 100;
+                  textAr = `الفئة الفضية. اجمع ${(30000 - spent).toLocaleString()} EGP للوصول للفئة الذهبية!`;
+                  textEn = `Silver Tier. Spend ${(30000 - spent).toLocaleString()} EGP more for Gold Tier (Free permanent shipping)!`;
+                } else if (spent < 70000) {
+                  pct = ((spent - 30000) / 40000) * 100;
+                  textAr = `الفئة الذهبية. اجمع ${(70000 - spent).toLocaleString()} EGP لفتح صالة البلاتينيوم!`;
+                  textEn = `Gold Tier. Spend ${(70000 - spent).toLocaleString()} EGP more for Platinum Lounge!`;
+                } else if (spent < 150000) {
+                  pct = ((spent - 70000) / 80000) * 100;
+                  textAr = `الفئة البلاتينية. اجمع ${(150000 - spent).toLocaleString()} EGP للوصول لفئة الدايموند النخبة!`;
+                  textEn = `Platinum Lounge Active. Spend ${(150000 - spent).toLocaleString()} EGP more for Diamond Tier!`;
                 } else {
                   pct = 100;
-                  textAr = "فئة ذهبية (+50%). لقد وصلت للقمة! تمتع بتوصيل مجاني وخصومات حصرية!";
-                  textEn = "Gold Tier (+50%). Max Level reached! Enjoy free delivery & exclusive discounts!";
+                  textAr = "فئة دايموند 💠. لقد وصلت لقمة النخبة الفاخرة! تم تمكين كافة المميزات الاستثنائية.";
+                  textEn = "Exclusive Diamond Tier 💠. Absolute highest tier unlocked! Enjoy luxury travel invites!";
                 }
 
                 return (
                   <>
+                    <div className="flex justify-between items-center text-[10px] uppercase font-bold text-brand-dark">
+                      <span>التقدم للفئة التالية / Next Tier Progress</span>
+                      <span className="font-mono text-[9px] text-brand-gold">{Math.round(pct)}%</span>
+                    </div>
+
                     <div className="w-full h-1.5 bg-[#c5a880]/15 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-brand-gold rounded-full transition-all duration-1000"
@@ -264,7 +351,7 @@ export default function UserProfileDropdown({
                     </div>
 
                     <div className="flex justify-between items-center pt-1 gap-2">
-                      <div className="text-[8px] text-brand-outline leading-relaxed max-w-[190px]">
+                      <div className="text-[8.5px] text-brand-outline leading-relaxed max-w-[200px]">
                         <p className="font-semibold text-[#a3855a]">{textAr}</p>
                         <p className="mt-0.5 opacity-80">{textEn}</p>
                       </div>
@@ -289,26 +376,55 @@ export default function UserProfileDropdown({
             {/* Member Privileges */}
             <div className="space-y-2">
               <h5 className="text-[9px] uppercase tracking-[0.2em] text-brand-outline/65 font-bold">
-                ميزات العضوية الفاخرة / Perks
+                ميزات ومكافآت الفئة الفعالة / Active Tier Perks
               </h5>
-              <div className="grid grid-cols-2 gap-2 text-[9px] font-medium">
-                <div className="flex items-center gap-1.5 p-2 bg-white rounded-lg border border-[#c5a880]/10">
-                  <Shield className="w-3 h-3 text-brand-gold shrink-0" />
-                  <span className="text-brand-dark">مستشار خاص بفلورنسا</span>
-                </div>
-                <div className="flex items-center gap-1.5 p-2 bg-white rounded-lg border border-[#c5a880]/10">
-                  <Gift className="w-3 h-3 text-brand-gold shrink-0" />
-                  <span className="text-brand-dark">شحن جوي مؤمن سريع</span>
-                </div>
-                <div className="flex items-center gap-1.5 p-2 bg-white rounded-lg border border-[#c5a880]/10">
-                  <CreditCard className="w-3 h-3 text-brand-gold shrink-0" />
-                  <span className="text-brand-dark">أسعار حصرية للأعضاء</span>
-                </div>
-                <div className="flex items-center gap-1.5 p-2 bg-white rounded-lg border border-[#c5a880]/10">
-                  <Clipboard className="w-3 h-3 text-brand-gold shrink-0" />
-                  <span className="text-brand-dark">تنزيلات مباشرة سرية</span>
-                </div>
-              </div>
+              {(() => {
+                const tier = user.tier || "Bronze";
+                const list = [
+                  { text: "Birthday Celebration Gift 🎁" },
+                  { text: "Members Only Private Offers 🏷️" },
+                ];
+                
+                if (tier === "Bronze") {
+                  list.push({ text: "Standard VERO Packaging 📦" });
+                  list.push({ text: "1.00 Point per 100 EGP Spent 🪙" });
+                } else if (tier === "Silver") {
+                  list.push({ text: "1.25 Point per 100 EGP Spent 🪙" });
+                  list.push({ text: "Free Shipping once per month 🚚" });
+                  list.push({ text: "Small Surprise Box per 5 orders 🎁" });
+                  list.push({ text: "24h Early Access to Discounts ⏱️" });
+                  list.push({ text: "Priority Support Line 📞" });
+                } else if (tier === "Gold") {
+                  list.push({ text: "1.50 Point per 100 EGP Spent 🪙" });
+                  list.push({ text: "Permanent Free Shipping 🚚" });
+                  list.push({ text: "Premium Packaging Upgrade 📦" });
+                  list.push({ text: "Monthly Mystery Box Delivery 🎁" });
+                  list.push({ text: "24h Early Access to Collections ⏱️" });
+                } else if (tier === "Platinum") {
+                  list.push({ text: "2.00 Point per 100 EGP Spent 🪙" });
+                  list.push({ text: "Permanent Free Shipping 🚚" });
+                  list.push({ text: "Personal Shopping Assistant 🛍️" });
+                  list.push({ text: "Access to Private Platinum Lounge 💎" });
+                  list.push({ text: "Priority Air Freight Delivery ✈️" });
+                } else if (tier === "Diamond") {
+                  list.push({ text: "2.50 Point per 100 EGP Spent 🪙" });
+                  list.push({ text: "Permanent Free Shipping 🚚" });
+                  list.push({ text: "Private Luxury Invites (Florence) ✈️" });
+                  list.push({ text: "Annual Custom Luxury Creation Gift 💎" });
+                  list.push({ text: "Absolute Production Priority ⚜️" });
+                }
+
+                return (
+                  <div className="grid grid-cols-2 gap-1.5 text-[8.5px] font-semibold">
+                    {list.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5 p-2 bg-white rounded-lg border border-[#c5a880]/10 text-brand-dark shadow-[0_1px_3px_rgba(0,0,0,0.01)] hover:border-brand-gold/30 transition-all">
+                        <Check className="w-2.5 h-2.5 text-brand-gold shrink-0" />
+                        <span className="truncate leading-normal">{item.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Order History */}

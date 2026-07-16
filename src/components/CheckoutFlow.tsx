@@ -1,6 +1,6 @@
 import React from "react";
 import { X, Lock, Check, Gift, ShoppingBag, CreditCard, Sparkles, Mail, User, MapPin } from "lucide-react";
-import { CartItem, UserProfile } from "../types";
+import { CartItem, UserProfile, getTierFromSpent } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 
 interface CheckoutFlowProps {
@@ -13,6 +13,7 @@ interface CheckoutFlowProps {
   total: number;
   promoCode: string;
   onClearCart: () => void;
+  onCheckoutSuccess?: (items: CartItem[]) => void;
   user?: UserProfile | null;
   onUpdateUser?: (profile: UserProfile) => void;
 }
@@ -27,6 +28,7 @@ export default function CheckoutFlow({
   total,
   promoCode,
   onClearCart,
+  onCheckoutSuccess,
   user,
   onUpdateUser,
 }: CheckoutFlowProps) {
@@ -134,19 +136,25 @@ export default function CheckoutFlow({
     let multiplier = 1.0;
     let boostPct = 0;
     if (user) {
-      const currentPts = user.loyaltyPoints || 0;
-      if (currentPts >= 15000) {
-        multiplier = 1.5; // Gold (+50%)
+      const tier = user.tier || "Bronze";
+      if (tier === "Diamond") {
+        multiplier = 2.5;
+        boostPct = 150;
+      } else if (tier === "Platinum") {
+        multiplier = 2.0;
+        boostPct = 100;
+      } else if (tier === "Gold") {
+        multiplier = 1.5;
         boostPct = 50;
-      } else if (currentPts >= 5000) {
-        multiplier = 1.25; // Silver (+25%)
+      } else if (tier === "Silver") {
+        multiplier = 1.25;
         boostPct = 25;
       }
     }
     setTierBoostPercent(boostPct);
 
-    // Points from spending (10 spent = 1 Point * multiplier)
-    const basePts = Math.round((finalPayable / 10) * multiplier);
+    // Points from spending (1 Point per 100 EGP * multiplier)
+    const basePts = Math.round((finalPayable / 100) * multiplier);
 
     // First order bonus: +100 gift points
     let isFirst = true;
@@ -188,11 +196,17 @@ export default function CheckoutFlow({
       // ignore
     }
 
-    // Award loyalty points to user and deduct redeemed points
+    // Award loyalty points and total spend to user and deduct redeemed points
     if (user && onUpdateUser) {
+      const currentSpent = Number(user.totalSpent || 0);
+      const updatedSpent = currentSpent + finalPayable;
+      const updatedTier = getTierFromSpent(updatedSpent);
+
       const updatedUser: UserProfile = {
         ...user,
         loyaltyPoints: Math.max(0, (user.loyaltyPoints || 0) - redeemed + finalEarnedPts),
+        totalSpent: updatedSpent,
+        tier: updatedTier,
       };
       onUpdateUser(updatedUser);
     }
@@ -200,6 +214,9 @@ export default function CheckoutFlow({
     setTimeout(() => {
       setLoading(false);
       setStep("success");
+      if (onCheckoutSuccess) {
+        onCheckoutSuccess(cartItems);
+      }
     }, 2000);
   };
 

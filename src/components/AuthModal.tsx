@@ -1,7 +1,8 @@
 import React from "react";
 import { X, Check, Loader2, Sparkles, Shield, Award, User, ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { UserProfile } from "../types";
+import { UserProfile, getTierFromSpent } from "../types";
+import UserAvatar from "./UserAvatar";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -16,7 +17,8 @@ const PRESET_USERS = {
     avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200",
     provider: "google" as const,
     tier: "Bronze" as const,
-    loyaltyPoints: 1250,
+    loyaltyPoints: 35,
+    totalSpent: 3500,
     joinedDate: "July 2026",
   },
   facebook: {
@@ -25,7 +27,8 @@ const PRESET_USERS = {
     avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200",
     provider: "facebook" as const,
     tier: "Silver" as const,
-    loyaltyPoints: 6200,
+    loyaltyPoints: 231,
+    totalSpent: 18500,
     joinedDate: "June 2026",
   },
   apple: {
@@ -34,7 +37,8 @@ const PRESET_USERS = {
     avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200",
     provider: "apple" as const,
     tier: "Gold" as const,
-    loyaltyPoints: 16500,
+    loyaltyPoints: 720,
+    totalSpent: 48000,
     joinedDate: "January 2026",
   },
 };
@@ -54,7 +58,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
   const [customName, setCustomName] = React.useState("");
   const [customEmail, setCustomEmail] = React.useState("");
   const [customTier, setCustomTier] = React.useState<UserProfile["tier"]>("Bronze");
-  const [customAvatar, setCustomAvatar] = React.useState("https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200");
+  const [customAvatar, setCustomAvatar] = React.useState("default");
   
   // Feedback states
   const [errorMessage, setErrorMessage] = React.useState("");
@@ -131,7 +135,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
       setSelectedProvider("email");
       setCustomEmail(emailInput.trim());
       setCustomName(emailInput.split("@")[0].charAt(0).toUpperCase() + emailInput.split("@")[0].slice(1));
-      setCustomAvatar("https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200");
+      setCustomAvatar("default");
       setStep("customize");
     } else {
       // Login mode
@@ -146,10 +150,9 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
       setStep("loading");
 
       setTimeout(() => {
-        const savedPoints = (userAccount as any).loyaltyPoints !== undefined ? (userAccount as any).loyaltyPoints : 250;
-        let finalTier: UserProfile["tier"] = "Bronze";
-        if (savedPoints >= 15000) finalTier = "Gold";
-        else if (savedPoints >= 5000) finalTier = "Silver";
+        const savedSpent = (userAccount as any).totalSpent !== undefined ? Number((userAccount as any).totalSpent) : 0;
+        const savedPoints = (userAccount as any).loyaltyPoints !== undefined ? Number((userAccount as any).loyaltyPoints) : 0;
+        const finalTier = getTierFromSpent(savedSpent);
 
         const loggedInUser: UserProfile = {
           name: userAccount.name,
@@ -158,6 +161,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
           provider: "email",
           tier: finalTier,
           loyaltyPoints: savedPoints,
+          totalSpent: savedSpent,
           redeemedRewards: (userAccount as any).redeemedRewards || [],
           joinedDate: "July 2026",
         };
@@ -174,13 +178,33 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
     setStep("success");
     const finalEmail = customEmail || emailInput.trim();
     const finalName = customName || "VERO Collector";
-    const initialPoints = selectedProvider && selectedProvider !== "email" 
-      ? PRESET_USERS[selectedProvider].loyaltyPoints 
-      : 250; // New website accounts get +250 welcome points!
+    
+    let initialSpent = 0;
+    let initialPoints = 0;
 
-    let determinedTier: UserProfile["tier"] = "Bronze";
-    if (initialPoints >= 15000) determinedTier = "Gold";
-    else if (initialPoints >= 5000) determinedTier = "Silver";
+    if (selectedProvider && selectedProvider !== "email") {
+      initialSpent = Number(PRESET_USERS[selectedProvider].totalSpent);
+      initialPoints = Number(PRESET_USERS[selectedProvider].loyaltyPoints);
+    } else {
+      if (customTier === "Silver") {
+        initialSpent = 15000;
+        initialPoints = 187;
+      } else if (customTier === "Gold") {
+        initialSpent = 45000;
+        initialPoints = 675;
+      } else if (customTier === "Platinum") {
+        initialSpent = 95000;
+        initialPoints = 1900;
+      } else if (customTier === "Diamond") {
+        initialSpent = 180000;
+        initialPoints = 4500;
+      } else {
+        initialSpent = 2500;
+        initialPoints = 25;
+      }
+    }
+
+    const determinedTier = getTierFromSpent(initialSpent);
 
     // If website sign-up, persist the account details in localStorage
     if (selectedProvider === "email" && websiteSubMode === "signup") {
@@ -200,6 +224,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
         avatar: customAvatar,
         pass: passwordInput,
         loyaltyPoints: initialPoints,
+        totalSpent: initialSpent,
         redeemedRewards: []
       };
       localStorage.setItem("vero_website_accounts", JSON.stringify(accounts));
@@ -212,6 +237,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
       provider: selectedProvider || "email",
       tier: determinedTier,
       loyaltyPoints: initialPoints,
+      totalSpent: initialSpent,
       joinedDate: "July 2026",
       redeemedRewards: []
     };
@@ -575,10 +601,11 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
 
                   {/* Avatar & Input */}
                   <div className="flex items-center gap-4">
-                    <img
-                      src={customAvatar}
-                      alt="Avatar"
-                      className="w-12 h-12 rounded-full object-cover border border-[#c5a880]/40 shadow-md shrink-0"
+                    <UserAvatar
+                      name={customName}
+                      avatar={customAvatar}
+                      className="w-12 h-12"
+                      borderClassName="border border-[#c5a880]/40 shadow-md shrink-0"
                     />
                     <div className="space-y-1">
                       <span className="text-[8px] uppercase tracking-widest text-[#c5a880] block font-bold">
@@ -627,11 +654,13 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
                       id="select-auth-tier"
                       value={customTier}
                       onChange={(e) => setCustomTier(e.target.value as UserProfile["tier"])}
-                      className="w-full bg-white border border-[#c5a880]/20 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-[#c5a880] tracking-wide"
+                      className="w-full bg-white border border-[#c5a880]/20 rounded-lg px-3.5 py-2 text-xs focus:outline-none focus:border-[#c5a880] tracking-wide text-brand-dark"
                     >
-                      <option value="Bronze">Bronze (0 - 5,000 PTS)</option>
-                      <option value="Silver">Silver (5,000 - 15,000 PTS)</option>
-                      <option value="Gold">Gold (15,000+ PTS)</option>
+                      <option value="Bronze">🥉 Bronze (0 - 9,999 EGP)</option>
+                      <option value="Silver">🥈 Silver (10,000 - 29,999 EGP)</option>
+                      <option value="Gold">🥇 Gold (30,000 - 69,999 EGP)</option>
+                      <option value="Platinum">💎 Platinum (70,000 - 149,999 EGP)</option>
+                      <option value="Diamond">💠 Diamond (150,000 - 299,999 EGP)</option>
                     </select>
                   </div>
                 </div>

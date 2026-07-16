@@ -2,6 +2,7 @@ import React from "react";
 import { Menu, ShoppingBag, Search, Heart, User, Sparkles, ShieldCheck } from "lucide-react";
 import { UserProfile } from "../types";
 import UserProfileDropdown from "./UserProfileDropdown";
+import UserAvatar from "./UserAvatar";
 
 interface HeaderProps {
   activeTab: string;
@@ -84,6 +85,17 @@ export default function Header({
             >
               Our Story
             </button>
+            {(user?.tier === "Platinum" || user?.tier === "Diamond") && (
+              <button
+                onClick={() => setActiveTab("platinum-lounge")}
+                className={`flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-3 py-1 rounded-full shadow-sm hover:from-cyan-500 hover:to-blue-500 transition-all scale-[0.98] ${
+                  activeTab === "platinum-lounge" ? "ring-2 ring-cyan-400" : ""
+                }`}
+              >
+                <Sparkles className="w-3 h-3 text-cyan-200 animate-pulse" />
+                <span>Platinum Lounge</span>
+              </button>
+            )}
             {user?.email === "vero2026@vero.com" && (
               <button
                 onClick={() => setActiveTab("admin")}
@@ -154,10 +166,11 @@ export default function Header({
                 className="flex items-center gap-1.5 hover:opacity-85 transition-opacity active:scale-95 duration-200 focus:outline-none"
                 aria-label="User Profile"
               >
-                <img
-                  src={user.avatar}
-                  alt={user.name}
-                  className="w-6 h-6 rounded-full object-cover border border-[#c5a880]/50"
+                <UserAvatar
+                  name={user.name}
+                  avatar={user.avatar}
+                  className="w-7 h-7"
+                  tier={user.tier}
                 />
                 <span className="hidden md:inline text-[9px] tracking-widest font-semibold text-brand-gold uppercase truncate max-w-[80px]">
                   {user.name.split(" ")[0]}

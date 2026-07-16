@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-import { Product, CartItem, UserProfile } from "./types";
+import { Product, CartItem, UserProfile, getTierFromSpent } from "./types";
 import { CATEGORIES, PRODUCTS, STORIES } from "./data";
 
 // Subcomponents
@@ -35,6 +35,48 @@ import BrandPillars from "./components/BrandPillars";
 import CheckoutFlow from "./components/CheckoutFlow";
 import AdminPanel from "./components/AdminPanel";
 import AuthModal from "./components/AuthModal";
+
+const LOUNGE_PRODUCTS: Product[] = [
+  {
+    id: "lounge-item-1",
+    name: "The Florence Imperial Crown Ring",
+    price: 125000,
+    categoryId: "rings",
+    categoryName: "Rings",
+    description: "An absolute masterwork of 18k platinum adorned with certified brilliant-cut diamonds. Exclusively hand-forged inside our private Florence vault.",
+    tagline: "Absolute Masterpiece",
+    image: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=800&auto=format&fit=crop&q=80",
+    secondaryImages: ["https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=800&auto=format&fit=crop&q=80"],
+    isNew: true,
+    stock: 1
+  },
+  {
+    id: "lounge-item-2",
+    name: "Royal Diamond Tear Necklace",
+    price: 280000,
+    categoryId: "necklaces",
+    categoryName: "Necklaces",
+    description: "A cascade of premium teardrop diamonds set on a pure solid platinum chain. Reflects the light of the Florentine stars.",
+    tagline: "Celestial Splendor",
+    image: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=800&auto=format&fit=crop&q=80",
+    secondaryImages: ["https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=800&auto=format&fit=crop&q=80"],
+    isNew: true,
+    stock: 1
+  },
+  {
+    id: "lounge-item-3",
+    name: "Platinum Cascade Marquise Bracelet",
+    price: 195000,
+    categoryId: "bracelets",
+    categoryName: "Bracelets",
+    description: "Hand-finished using a patented marquise interlocking link technique, embedded with rare icy-blue micro-diamonds.",
+    tagline: "Artisanal Grace",
+    image: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=800&auto=format&fit=crop&q=80",
+    secondaryImages: ["https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=800&auto=format&fit=crop&q=80"],
+    isNew: true,
+    stock: 1
+  }
+];
 
 export default function App() {
   // Navigation & Page state
@@ -54,22 +96,36 @@ export default function App() {
   });
   const [authModalOpen, setAuthModalOpen] = React.useState(false);
 
+  // Elite Club Welcome Screen States
+  const [showGoldWelcome, setShowGoldWelcome] = React.useState(false);
+  const [welcomeTier, setWelcomeTier] = React.useState<string>("");
+  const welcomedRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (user && (user.tier === "Gold" || user.tier === "Platinum" || user.tier === "Diamond")) {
+      if (welcomedRef.current !== user.email) {
+        setShowGoldWelcome(true);
+        setWelcomeTier(user.tier);
+        welcomedRef.current = user.email;
+        const timer = setTimeout(() => {
+          setShowGoldWelcome(false);
+        }, 4000);
+        return () => clearTimeout(timer);
+      }
+    } else if (!user) {
+      welcomedRef.current = null;
+    }
+  }, [user]);
+
   const handleLoginSuccess = (profile: UserProfile) => {
     setUser(profile);
     localStorage.setItem("vero_user", JSON.stringify(profile));
   };
 
   const handleUpdateUser = (updatedProfile: UserProfile) => {
-    // Dynamically calculate tier based on points according to user request
-    let finalTier: UserProfile["tier"] = "Bronze";
-    const pts = updatedProfile.loyaltyPoints || 0;
-    if (pts >= 15000) {
-      finalTier = "Gold";
-    } else if (pts >= 5000) {
-      finalTier = "Silver";
-    } else {
-      finalTier = "Bronze";
-    }
+    // Dynamically calculate tier based on totalSpent according to user request
+    const spent = updatedProfile.totalSpent || 0;
+    const finalTier = getTierFromSpent(spent);
 
     const resolvedProfile: UserProfile = {
       ...updatedProfile,
@@ -93,6 +149,7 @@ export default function App() {
               tier: resolvedProfile.tier,
               avatar: resolvedProfile.avatar,
               loyaltyPoints: resolvedProfile.loyaltyPoints,
+              totalSpent: resolvedProfile.totalSpent,
               redeemedRewards: resolvedProfile.redeemedRewards
             };
             localStorage.setItem("vero_website_accounts", JSON.stringify(accounts));
@@ -109,8 +166,8 @@ export default function App() {
     localStorage.removeItem("vero_user");
   };
 
-  // Dynamic products list persistent in localStorage
-  const [products, setProducts] = React.useState<Product[]>(() => {
+  // Dynamic products list with server database integration
+  const [products, setProductsState] = React.useState<Product[]>(() => {
     const saved = localStorage.getItem("vero_products");
     if (saved) {
       try {
@@ -125,9 +182,121 @@ export default function App() {
     return PRODUCTS;
   });
 
+  // Intercept state changes and synchronize with the backend Express server securely
+  const setProducts: React.Dispatch<React.SetStateAction<Product[]>> = (value) => {
+    // 1. Calculate the next products array
+    let next: Product[];
+    if (typeof value === "function") {
+      next = (value as Function)(products);
+    } else {
+      next = value;
+    }
+
+    // 2. Optimistically update client state immediately
+    setProductsState(next);
+
+    // 3. Perform background API sync to persist to server disk
+    const syncWithServer = async () => {
+      try {
+        if (next.length < products.length) {
+          // Delete product
+          const removed = products.find((p) => !next.some((n) => n.id === p.id));
+          if (removed) {
+            const res = await fetch(`/api/products/${removed.id}`, {
+              method: "DELETE",
+            });
+            if (res.ok) {
+              const serverProducts = await res.json();
+              setProductsState(serverProducts);
+            }
+          }
+        } else if (next.length > products.length) {
+          // Add product
+          const added = next.find((n) => !products.some((p) => p.id === n.id));
+          if (added) {
+            const res = await fetch("/api/products", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(added),
+            });
+            if (res.ok) {
+              const serverProducts = await res.json();
+              setProductsState(serverProducts);
+            }
+          }
+        } else {
+          // Edit or Badge status toggle
+          let modified: Product | null = null;
+          for (let i = 0; i < next.length; i++) {
+            const prevItem = products.find((p) => p.id === next[i].id);
+            if (prevItem && JSON.stringify(prevItem) !== JSON.stringify(next[i])) {
+              modified = next[i];
+              break;
+            }
+          }
+          if (modified) {
+            const res = await fetch(`/api/products/${modified.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(modified),
+            });
+            if (res.ok) {
+              const serverProducts = await res.json();
+              setProductsState(serverProducts);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error syncing product changes to backend:", err);
+      }
+    };
+
+    syncWithServer();
+  };
+
+  // Poll server for updates every 4 seconds to show live updates immediately
+  React.useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch("/api/products");
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setProductsState(data);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching products from server:", err);
+      }
+    };
+
+    fetchProducts();
+    const interval = setInterval(fetchProducts, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
   const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(
     products.find((p) => p.id === "sculpted-aurelian-ring") || products[0]
   );
+
+  // Keep selectedProduct object in sync with incoming server edits
+  React.useEffect(() => {
+    if (selectedProduct) {
+      const updated = products.find((p) => p.id === selectedProduct.id);
+      if (!updated) {
+        // The selected product was deleted! Default to the first available product.
+        if (products.length > 0) {
+          setSelectedProduct(products[0]);
+        } else {
+          setSelectedProduct(null);
+        }
+      } else if (JSON.stringify(updated) !== JSON.stringify(selectedProduct)) {
+        setSelectedProduct(updated);
+      }
+    } else if (products.length > 0) {
+      setSelectedProduct(products[0]);
+    }
+  }, [products, selectedProduct]);
 
   // Cart & Favorites state loaded from localStorage if exists
   const [cart, setCart] = React.useState<CartItem[]>(() => {
@@ -203,6 +372,15 @@ export default function App() {
   const [promoError, setPromoError] = React.useState("");
   const [promoSuccess, setPromoSuccess] = React.useState("");
 
+  // App-wide toast notification state
+  const [appNotification, setAppNotification] = React.useState<string | null>(null);
+  const triggerAppNotification = (msg: string) => {
+    setAppNotification(msg);
+    setTimeout(() => {
+      setAppNotification((prev) => (prev === msg ? null : prev));
+    }, 4000);
+  };
+
   // Product detail active secondary photo swap state
   const [activeDetailImage, setActiveDetailImage] = React.useState<string>("");
 
@@ -225,9 +403,20 @@ export default function App() {
     localStorage.setItem("vero_products", JSON.stringify(products));
   }, [products]);
 
-  const handleResetDatabase = () => {
+  const handleResetDatabase = async () => {
     localStorage.removeItem("vero_products");
-    setProducts(PRODUCTS);
+    try {
+      const res = await fetch("/api/products/reset", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setProductsState(data);
+      } else {
+        setProductsState(PRODUCTS);
+      }
+    } catch (err) {
+      console.error("Error resetting catalog on server:", err);
+      setProductsState(PRODUCTS);
+    }
   };
 
   // Sync main image on product details whenever selected product changes
@@ -239,32 +428,101 @@ export default function App() {
 
   // Cart operations
   const handleAddToBag = (product: Product, material: string, size: string, quantity = 1) => {
+    const latestProduct = products.find((p) => p.id === product.id) || product;
+    const stockLimit = latestProduct.stock;
+
+    if (stockLimit !== undefined) {
+      if (stockLimit === 0) {
+        triggerAppNotification(`عذراً، هذا المنتج غير متوفر حالياً بالمخزن! / Sorry, this item is out of stock!`);
+        return;
+      }
+    }
+
     const cartItemId = `${product.id}_${material}_${size}`;
+    let exceededStock = false;
+
     setCart((prevCart) => {
       const existing = prevCart.find((item) => item.id === cartItemId);
+      const otherItemsOfProduct = prevCart.filter((item) => item.product.id === product.id && item.id !== cartItemId);
+      const otherQty = otherItemsOfProduct.reduce((sum, item) => sum + item.quantity, 0);
+
       if (existing) {
+        const proposedQty = existing.quantity + quantity;
+        if (stockLimit !== undefined && proposedQty + otherQty > stockLimit) {
+          exceededStock = true;
+          const allowedQty = Math.max(0, stockLimit - otherQty);
+          if (allowedQty === existing.quantity) {
+            return prevCart;
+          }
+          return prevCart.map((item) =>
+            item.id === cartItemId
+              ? { ...item, quantity: allowedQty }
+              : item
+          );
+        }
         return prevCart.map((item) =>
           item.id === cartItemId
-            ? { ...item, quantity: item.quantity + quantity }
+            ? { ...item, quantity: proposedQty }
             : item
         );
       } else {
+        if (stockLimit !== undefined && quantity + otherQty > stockLimit) {
+          exceededStock = true;
+          const allowedQty = Math.max(0, stockLimit - otherQty);
+          if (allowedQty <= 0) {
+            return prevCart;
+          }
+          return [...prevCart, { id: cartItemId, product, quantity: allowedQty, selectedMaterial: material, selectedSize: size }];
+        }
         return [...prevCart, { id: cartItemId, product, quantity, selectedMaterial: material, selectedSize: size }];
       }
     });
+
+    if (exceededStock && stockLimit !== undefined) {
+      triggerAppNotification(`عذراً، تم تحديد الكمية لتتناسب مع المخزن المتوفر (${stockLimit} قطع)! / Sorry, quantity limited to available stock (${stockLimit} items)!`);
+    } else {
+      triggerAppNotification(`تمت إضافة "${product.name}" إلى حقيبتك! / "${product.name}" added to your bag!`);
+    }
   };
 
   const handleUpdateQuantity = (itemId: string, delta: number) => {
-    setCart((prevCart) =>
-      prevCart
-        .map((item) => {
-          if (item.id === itemId) {
-            const newQty = item.quantity + delta;
-            return { ...item, quantity: newQty < 1 ? 1 : newQty };
-          }
-          return item;
-        })
-    );
+    let exceededStock = false;
+    let limitAmount = 0;
+
+    setCart((prevCart) => {
+      const targetItem = prevCart.find((item) => item.id === itemId);
+      if (!targetItem) return prevCart;
+
+      const latestProduct = products.find((p) => p.id === targetItem.product.id) || targetItem.product;
+      const stockLimit = latestProduct.stock;
+
+      if (stockLimit !== undefined) {
+        const otherItems = prevCart.filter((item) => item.product.id === latestProduct.id && item.id !== itemId);
+        const otherQty = otherItems.reduce((sum, item) => sum + item.quantity, 0);
+        const newQty = targetItem.quantity + delta;
+
+        if (newQty + otherQty > stockLimit) {
+          exceededStock = true;
+          limitAmount = stockLimit;
+          const allowedQty = Math.max(1, stockLimit - otherQty);
+          return prevCart.map((item) =>
+            item.id === itemId ? { ...item, quantity: allowedQty } : item
+          );
+        }
+      }
+
+      return prevCart.map((item) => {
+        if (item.id === itemId) {
+          const newQty = item.quantity + delta;
+          return { ...item, quantity: newQty < 1 ? 1 : newQty };
+        }
+        return item;
+      });
+    });
+
+    if (exceededStock) {
+      triggerAppNotification(`عذراً، لقد وصلت للحد الأقصى للمخزن المتوفر (${limitAmount} قطع)! / Sorry, you have reached the maximum available stock (${limitAmount} items)!`);
+    }
   };
 
   const handleRemoveFromCart = (itemId: string) => {
@@ -273,6 +531,23 @@ export default function App() {
 
   const handleClearCart = () => {
     setCart([]);
+  };
+
+  const handleCheckoutSuccess = (purchasedItems: CartItem[]) => {
+    setProducts((prevProducts) => {
+      return prevProducts.map((p) => {
+        const item = purchasedItems.find((ci) => ci.product.id === p.id);
+        if (item) {
+          if (p.stock !== undefined) {
+            return {
+              ...p,
+              stock: Math.max(0, p.stock - item.quantity),
+            };
+          }
+        }
+        return p;
+      });
+    });
   };
 
   // Favorite operations
@@ -899,6 +1174,24 @@ export default function App() {
                       <p className="font-sans text-xl font-semibold text-brand-gold">
                         ${selectedProduct.price.toLocaleString()}.00
                       </p>
+
+                      {selectedProduct.stock !== undefined && (
+                        <div className="mt-4">
+                          {selectedProduct.stock === 0 ? (
+                            <span className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded uppercase tracking-wider inline-block">
+                              غير متوفر حالياً / Out of Stock
+                            </span>
+                          ) : selectedProduct.stock === 1 ? (
+                            <span className="text-xs text-amber-700 font-bold bg-amber-50 border border-amber-300 px-3 py-1.5 rounded uppercase tracking-wider inline-block animate-bounce">
+                              القطعة الأخيرة! / THE LAST ONE!
+                            </span>
+                          ) : (
+                            <span className="text-xs text-brand-umber font-semibold bg-brand-gold/10 border border-brand-gold/20 px-3 py-1.5 rounded inline-block font-sans animate-pulse">
+                              الكمية المتبقية بالمخزن: {selectedProduct.stock} قطع / Only {selectedProduct.stock} left in stock
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="h-px bg-brand-outline-variant/20 w-full" />
@@ -971,18 +1264,29 @@ export default function App() {
                   {/* Actions buttons */}
                   <div className="space-y-6 pt-10">
                     <motion.button
-                      whileHover={{ y: -2 }}
-                      whileTap={{ scale: 0.98 }}
+                      whileHover={selectedProduct.stock === 0 ? {} : { y: -2 }}
+                      whileTap={selectedProduct.stock === 0 ? {} : { scale: 0.98 }}
+                      disabled={selectedProduct.stock === 0}
                       onClick={() => {
                         const material = selectedProduct.materialOptions?.[0] || "#E5D5BC";
                         const size = selectedProduct.sizeOptions?.[0] || "One Size";
                         handleAddToBag(selectedProduct, material, size);
                         setActiveTab("bag");
                       }}
-                      className="w-full bg-brand-gold hover:bg-brand-umber text-white font-sans text-xs font-semibold py-5 uppercase tracking-[0.2em] transition-all shadow-md rounded-sm flex items-center justify-center gap-3"
+                      className={`w-full py-5 text-white font-sans text-xs font-semibold uppercase tracking-[0.2em] transition-all shadow-md rounded-sm flex items-center justify-center gap-3 ${
+                        selectedProduct.stock === 0
+                          ? "bg-rose-700/85 cursor-not-allowed"
+                          : "bg-brand-gold hover:bg-brand-umber"
+                      }`}
                     >
-                      <ShoppingBag className="w-4 h-4 stroke-[1.5]" />
-                      Add to Bag
+                      {selectedProduct.stock === 0 ? (
+                        <>OUT OF STOCK</>
+                      ) : (
+                        <>
+                          <ShoppingBag className="w-4 h-4 stroke-[1.5]" />
+                          Add to Bag
+                        </>
+                      )}
                     </motion.button>
                     <p className="text-center text-[10px] font-light text-brand-outline tracking-wider uppercase flex items-center justify-center gap-2">
                       <ShieldCheck className="w-4 h-4 text-brand-gold" />
@@ -1445,6 +1749,151 @@ export default function App() {
             </motion.div>
           )}
 
+          {activeTab === "platinum-lounge" && (user?.tier === "Platinum" || user?.tier === "Diamond") && (
+            <motion.div
+              key="platinum-lounge"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="max-w-7xl mx-auto px-6 py-12 space-y-12 mt-16 md:mt-24"
+            >
+              {/* Premium Header */}
+              <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-indigo-950 via-[#131124] to-slate-950 border border-teal-500/30 p-8 md:p-16 text-center space-y-4 shadow-2xl">
+                {/* Metallic sweep */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-teal-400/10 to-transparent -translate-x-full animate-shimmer pointer-events-none" />
+
+                <div className="relative z-10 space-y-3 max-w-3xl mx-auto">
+                  <div className="flex items-center justify-center gap-2">
+                    <Sparkles className="w-5 h-5 text-teal-400 animate-pulse" />
+                    <span className="text-[10px] md:text-xs font-bold tracking-[0.3em] text-teal-400 uppercase">
+                      VERO SANCTUARY
+                    </span>
+                    <Sparkles className="w-5 h-5 text-teal-400 animate-pulse" />
+                  </div>
+                  <h1 className="font-serif text-3xl md:text-5xl text-white font-bold tracking-wide">
+                    The Platinum Lounge
+                  </h1>
+                  <p className="font-serif text-sm md:text-base text-teal-100/70 italic leading-relaxed">
+                    "صالة النخبة الخاصة بأعضاء البلاتينيوم والدايموند - عروض حصرية وقطع نادرة صممت خصيصاً لكم ولا يراها غيركم."
+                  </p>
+                  <p className="font-sans text-xs font-light text-slate-400 tracking-wider max-w-xl mx-auto leading-relaxed">
+                    An exclusive private showcase of bespoke masterpieces crafted by our head artisans in Florence. These works of art are strictly reserved for our top tier collectors.
+                  </p>
+                </div>
+              </div>
+
+              {/* Secret Offers Grid */}
+              <div className="space-y-6">
+                <div className="border-b border-brand-outline-variant/30 pb-3 flex justify-between items-end">
+                  <div>
+                    <h4 className="font-serif text-xl text-brand-umber font-semibold">Secret Collections</h4>
+                    <p className="text-[10px] text-brand-outline font-sans tracking-wide uppercase mt-1">Certified Bespoke Creations</p>
+                  </div>
+                  <span className="text-[10px] font-mono font-semibold bg-teal-50 text-teal-700 px-3 py-1 border border-teal-100 rounded-full">
+                    3 Masterpieces Available
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  {LOUNGE_PRODUCTS.map((prod) => (
+                    <motion.div
+                      key={prod.id}
+                      initial={{ opacity: 0, y: 15 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      className="bg-white border border-[#c5a880]/15 rounded-2xl overflow-hidden shadow-md flex flex-col group hover:shadow-xl transition-all duration-300"
+                    >
+                      <div className="relative aspect-[4/3] bg-brand-surface-low overflow-hidden">
+                        <img
+                          src={prod.image}
+                          alt={prod.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute top-3 left-3 bg-teal-500 text-white text-[8px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full shadow">
+                          Bespoke Only
+                        </div>
+                      </div>
+
+                      <div className="p-5 flex-grow flex flex-col justify-between space-y-4">
+                        <div className="space-y-1">
+                          <h5 className="font-serif text-sm font-bold text-brand-umber tracking-wide">
+                            {prod.name}
+                          </h5>
+                          <p className="text-[11px] text-brand-outline font-light leading-relaxed">
+                            {prod.description}
+                          </p>
+                        </div>
+
+                        <div className="pt-3 border-t border-[#c5a880]/10 flex justify-between items-center">
+                          <div>
+                            <p className="text-[8px] uppercase tracking-widest text-brand-outline">Collector Price</p>
+                            <p className="font-mono text-xs font-bold text-teal-700">EGP {prod.price.toLocaleString()}</p>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              handleAddToBag(prod, "Platinum", "One Size", 1);
+                              setAppNotification(`Added ${prod.name} to your Private Bag`);
+                            }}
+                            className="bg-slate-900 hover:bg-teal-700 text-white text-[9px] uppercase tracking-widest font-bold px-4 py-2 rounded-lg transition-all active:scale-95"
+                          >
+                            Acquire Piece
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Private Concierge Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6">
+                <div className="bg-[#f0f9ff]/40 border border-blue-200/50 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
+                  <div className="p-3 bg-blue-100 text-blue-600 rounded-xl shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-2">
+                    <h5 className="font-serif text-sm font-bold text-slate-800">Private Design Concierge</h5>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      "تواصل مباشرة مع كبير المصممين لدينا في فلورنسا لصياغة قطعة فريدة مصنوعة خصيصاً من أجلك."
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-light leading-relaxed">
+                      As a Platinum / Diamond member, you have a direct priority communication channel for absolute custom jewelry creations.
+                    </p>
+                    <button
+                      onClick={() => setAppNotification("Your personal design concierge has been notified. They will contact you shortly.")}
+                      className="mt-2 bg-blue-600 hover:bg-blue-700 text-white text-[8px] font-bold uppercase tracking-wider px-3.5 py-2 rounded-lg transition-all"
+                    >
+                      Request Private Call
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-[#fdf8f6]/50 border border-orange-200/50 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
+                  <div className="p-3 bg-orange-100 text-orange-600 rounded-xl shrink-0">
+                    <Sparkles className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div className="space-y-2">
+                    <h5 className="font-serif text-sm font-bold text-slate-800">Exclusive Florence Luxury Invite</h5>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      "دعوة خاصة لحضور معرض فيرو الفاخر القادم بفلورنسا الإيطالية - شامل الشحن الجوي السريع وتذكرة الطيران."
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-light leading-relaxed">
+                      Complimentary business-class flight and premium boutique tour in Florence, fully taken care of by the VERO luxury program.
+                    </p>
+                    <button
+                      onClick={() => setAppNotification("Your invitation coordinates are being assembled. Our travel advisor will reach out today.")}
+                      className="mt-2 bg-slate-900 hover:bg-slate-800 text-white text-[8px] font-bold uppercase tracking-wider px-3.5 py-2 rounded-lg transition-all"
+                    >
+                      Acquire Lounge Invite
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {activeTab === "admin" && user?.email === "vero2026@vero.com" && (
             <motion.div
               key="admin"
@@ -1638,9 +2087,84 @@ export default function App() {
         total={cartTotal}
         promoCode={activePromo}
         onClearCart={handleClearCart}
+        onCheckoutSuccess={handleCheckoutSuccess}
         user={user}
         onUpdateUser={handleUpdateUser}
       />
+
+      {/* App-wide Toast Notification banner */}
+      <AnimatePresence>
+        {appNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -40, scale: 0.95 }}
+            className="fixed top-24 left-1/2 -translate-x-1/2 z-[250] bg-brand-umber text-white border border-brand-gold/30 px-6 py-4 shadow-2xl rounded-sm flex items-center gap-3.5 max-w-md w-[calc(100%-2rem)]"
+          >
+            <Info className="w-5 h-5 text-brand-gold shrink-0" />
+            <p className="text-xs font-semibold tracking-wide text-brand-linen leading-relaxed flex-grow">
+              {appNotification}
+            </p>
+            <button
+              onClick={() => setAppNotification(null)}
+              className="text-brand-outline/60 hover:text-white transition-colors shrink-0 p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Gold/Platinum/Diamond Member Welcome Overlay Screen */}
+      <AnimatePresence>
+        {showGoldWelcome && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-md pointer-events-auto"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 30 }}
+              transition={{ type: "spring", damping: 24, stiffness: 190 }}
+              className="bg-gradient-to-br from-amber-950 via-[#1c1610] to-[#0c0a08] border-2 border-amber-400/40 p-8 md:p-12 rounded-3xl text-center max-w-md mx-4 shadow-[0_20px_60px_rgba(251,191,36,0.18)] relative overflow-hidden"
+            >
+              {/* Shimmer sweep */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-amber-400/15 to-transparent -translate-x-full animate-shimmer pointer-events-none" />
+
+              <div className="relative z-10 space-y-6">
+                {/* Large sparkling crown/badge */}
+                <div className="mx-auto w-16 h-16 rounded-full bg-amber-400/15 border border-amber-400/30 flex items-center justify-center shadow-[0_0_20px_rgba(251,191,36,0.2)]">
+                  <Sparkles className="w-8 h-8 text-amber-400 animate-spin" style={{ animationDuration: "8s" }} />
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-amber-400/80 font-bold">
+                    VERO Elite Club
+                  </p>
+                  <h3 className="font-serif text-2xl text-amber-200 font-bold tracking-wide">
+                    Welcome Back, {welcomeTier} Member ✨
+                  </h3>
+                  <p className="text-[11px] text-amber-100/60 font-serif italic max-w-xs mx-auto leading-relaxed">
+                    "Every purchase unlocks a higher status. Welcome to our most exclusive luxury circle."
+                  </p>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={() => setShowGoldWelcome(false)}
+                    className="text-[9px] uppercase tracking-widest font-semibold border border-amber-400/35 hover:border-amber-400/60 text-amber-400 bg-amber-400/5 hover:bg-amber-400/10 px-5 py-2 rounded-full transition-all"
+                  >
+                    Enter Private Collection
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
